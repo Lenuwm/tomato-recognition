@@ -61,7 +61,19 @@ def build_targets(targets, anchors: torch.Tensor, S: int, img_size: int, num_cla
 
     return tbox, tobj, tcls
 
-def yolo_loss(pred, tbox, tobj, tcls, anchors, img_size, S, lambda_box, lambda_obj, lambda_cls):
+def yolo_loss(
+    pred,
+    tbox,
+    tobj,
+    tcls,
+    anchors,
+    img_size,
+    S,
+    lambda_box,
+    lambda_obj,
+    lambda_cls,
+    cls_weights=None,
+):
     """
     pred: (B,S,S,A,5+C) raw logits
     计算简化YOLO loss
@@ -119,7 +131,9 @@ def yolo_loss(pred, tbox, tobj, tcls, anchors, img_size, S, lambda_box, lambda_o
 
     # 关键：分类loss（正样本位置）
     target_cls = torch.argmax(cls_pos, dim=1)  # (Npos,) 由one-hot转类别id
-    cls_loss = F.cross_entropy(p_pos[:, 5:], target_cls, reduction="mean")
+    if cls_weights is not None:
+        cls_weights = cls_weights.to(p_pos.device)
+    cls_loss = F.cross_entropy(p_pos[:, 5:], target_cls, weight=cls_weights, reduction="mean")
 
     total = lambda_box * box_loss + lambda_obj * obj_loss + lambda_cls * cls_loss
     return total, {"loss": total.item(), "box": box_loss.item(), "obj": obj_loss.item(), "cls": cls_loss.item()}
