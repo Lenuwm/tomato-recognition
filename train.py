@@ -51,6 +51,7 @@ class CFG:
     lambda_box = 5.0
     lambda_obj = 1.0
     lambda_cls = 1.0
+    use_class_weights = True
 
     out_dir = "./outputs"
 
@@ -83,7 +84,44 @@ def _gt_to_xyxy_pix(gt: torch.Tensor):
     return gt_xyxy, gt_cls
 
 
-def train_one_epoch(model, loader, optimizer, anchors_t):
+def _resolve_label_path(img_id: str, label_dir: str) -> str:
+    lab_path = os.path.join(label_dir, img_id + ".txt")
+    if os.path.exists(lab_path):
+        return lab_path
+    lab_path2 = os.path.join(label_dir, os.path.basename(img_id) + ".txt")
+    if os.path.exists(lab_path2):
+        return lab_path2
+    return lab_path
+
+
+def compute_class_weights(list_file: str, label_dir: str, num_classes: int):
+    counts = np.zeros((num_classes,), dtype=np.int64)
+    with open(list_file, "r", encoding="utf-8") as f:
+        ids = [line.strip() for line in f if line.strip()]
+
+    for img_id in ids:
+        lab_path = _resolve_label_path(img_id, label_dir)
+        if not os.path.exists(lab_path):
+            continue
+        with open(lab_path, "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.strip().split()
+                if len(parts) != 5:
+                    continue
+                cls = int(float(parts[0]))
+                if 0 <= cls < num_classes:
+                    counts[cls] += 1
+
+    total = counts.sum()
+    if total == 0:
+        return torch.ones((num_classes,), dtype=torch.float32), counts
+
+    weights = total / (num_classes * np.maximum(counts, 1))
+    weights = weights.astype(np.float32)
+    return torch.tensor(weights, dtype=torch.float32), counts
+
+
+def train_one_epoch(model, loader, optimizer, anchors_t, cls_weights=None):
     model.train()
     meter = {"loss": 0.0, "box": 0.0, "obj": 0.0, "cls": 0.0}
     n = 0
@@ -98,7 +136,8 @@ def train_one_epoch(model, loader, optimizer, anchors_t):
         loss, parts = yolo_loss(
             pred, tbox, tobj, tcls,
             anchors_t, cfg.img_size, cfg.S,
-            cfg.lambda_box, cfg.lambda_obj, cfg.lambda_cls
+            cfg.lambda_box, cfg.lambda_obj, cfg.lambda_cls,
+            cls_weights=cls_weights
         )
 
         optimizer.zero_grad()
@@ -431,13 +470,19 @@ def main():
     model = YoloTiny(cfg.num_classes, cfg.S, cfg.A).to(cfg.device)
     optimizer = torch.optim.Adam(model.parameters(), lr=cfg.lr, weight_decay=cfg.weight_decay)
 
+    cls_weights = None
+    if cfg.use_class_weights:
+        cls_weights, cls_counts = compute_class_weights(cfg.train_list, cfg.label_dir, cfg.num_classes)
+        print("[ClassWeights] counts:", cls_counts.tolist())
+        print("[ClassWeights] weights:", cls_weights.tolist())
+
     best_map = -1.0
     history = []  # 每个epoch记录一次
 
     for epoch in range(1, cfg.epochs + 1):
         t0 = time.time()
 
-        meter = train_one_epoch(model, train_loader, optimizer, anchors_t)
+        meter = train_one_epoch(model, train_loader, optimizer, anchors_t, cls_weights=cls_weights)
         val_metrics = evaluate_map_and_count(model, val_loader, anchors_t)
 
         # 宏F1 + 混淆矩阵（这里每轮算 macroF1；混淆矩阵只在 best 时保存）
