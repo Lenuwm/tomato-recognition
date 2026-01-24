@@ -119,10 +119,6 @@ python make_dummy_data.py -h
 * 推理可视化/预测结果：`outputs/`
 * 旧版输出备份：`outputs_old/`
 
-你也可以在 README 中补充：
-
-* 最佳模型权重保存路径（如 `outputs/best.pt` 或 `logs/ckpt_best.pth`）
-* 推理结果示例图（建议新增 `assets/` 并在此处展示）
 
 
 ```
