@@ -40,13 +40,6 @@
 - Python 3.8+（建议）
 - 依赖项以你的 `pip/conda` 环境为准
 
-> 推荐你补充一个 `requirements.txt`（或在 README 中写清关键依赖），例如：
-> - torch / torchvision
-> - numpy
-> - opencv-python
-> - tqdm
-> - pycocotools（如果使用 COCO 标注）
-
 ## Quick Start
 
 ### 1) 克隆与进入目录
@@ -55,7 +48,7 @@ git clone https://github.com/Lenuwm/tomato-recognition.git
 cd tomato-recognition
 ````
 
-### 2) 安装依赖（建议你在仓库补充 requirements.txt 后使用）
+### 2) 安装依赖
 
 ```bash
 pip install -r requirements.txt
